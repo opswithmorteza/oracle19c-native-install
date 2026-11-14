@@ -1,0 +1,78 @@
+---
+oracle19c:
+  hosts:
+    db19:
+      ansible_host: 192.0.2.19 # replace with your clean Oracle Linux 8 host
+      ansible_user: ol
+  vars:
+    hostgroup: oracle19c
+    oracle19c_install_approved: false
+    oracle19c_license_confirmed: false
+    oracle19c_ru_reviewed: false
+    oracle19c_ru: '19.32.0.0.0' # explicit profile target, not a claim of latest RU
+    oracle19c_gold_image: /u01/sw/db_home_19.32.zip
+    oracle19c_gold_sha256: REPLACE_WITH_TRUSTED_SHA256
+    oracle19c_min_free_gib: 80
+    # default_dbpass must be provided using an encrypted Ansible Vault file.
+    # No OS password or database password belongs in this inventory.
+    is_sw_source_local: true
+    oracle_sw_copy: false
+    oracle_sw_unpack: true
+    oracle_sw_source_local: /u01/sw
+    oracle_stage_remote: /u01/sw
+    oracle_stage: /u01/stage
+    apply_patches_db: false # input gold image is already RU-patched
+    configure_host_disks: false
+    host_fs_layout: []
+    disable_selinux: false
+    disable_firewall: false
+    firewall_open_listener_ports: false
+    configure_ssh: false
+    configure_oracle_sudo: false
+    configure_public_yum_repo: false
+    configure_epel_repo: false
+    configure_motd: false
+    autostartup_service: true
+    configure_hugepages_by: memory
+    size_in_gb_hugepages: 0
+    db_homes_config:
+      db19:
+        version: 19.3.0.0 # upstream installer/template family, not installed RU
+        oracle_home: /u01/app/oracle/product/19c/dbhome_1
+        oracle_home_name: db19
+        edition: EE
+        imagename: "{{ oracle19c_gold_image | basename }}"
+        state: present
+    db_homes_installed:
+      - {home: db19, apply_patches: false, state: present}
+    oracle_listeners_config:
+      LISTENER:
+        home: db19
+        address:
+          - {host: '127.0.0.1', protocol: TCP, port: 1521}
+    listener_installed:
+      - {home: db19, listener_name: LISTENER, state: present}
+    oracle_databases:
+      - home: db19
+        oracle_db_name: ORCLCDB
+        oracle_db_type: SI
+        storage_type: FS
+        oracle_database_type: MULTIPURPOSE
+        is_container: true
+        characterset: AL32UTF8
+        listener_name: LISTENER
+        listener_port: 1521
+        archivelog: false # isolated development baseline; see README-19C before production
+        flashback: false
+        force_logging: true
+        state: present
+        init_parameters:
+          - {name: control_management_pack_access, value: NONE, scope: both, state: present}
+          - {name: local_listener, value: '127.0.0.1:1521', scope: both, state: present}
+          - {name: sga_target, value: 2G, scope: spfile, state: present}
+          - {name: pga_aggregate_target, value: 1G, scope: both, state: present}
+          - {name: db_create_file_dest, value: /u02/oradata, scope: both, state: present}
+          - {name: db_recovery_file_dest_size, value: 20G, scope: both, state: present, dbca: false}
+          - {name: db_recovery_file_dest, value: /u02/fra, scope: both, state: present}
+    oracle_pdbs:
+      - {home: db19, cdb: ORCLCDB, pdb_name: APPPDB, listener_port: 1521, state: present}

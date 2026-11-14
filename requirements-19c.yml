@@ -1,0 +1,13 @@
+---
+collections:
+  - name: https://github.com/oravirt/ansible-oracle.git
+    type: git
+    version: 97e0255a8cb917e4fa30c257bd8565a699331f06
+  - name: community.general
+    version: 11.4.0
+  - name: community.crypto
+    version: 2.26.0
+  - name: ansible.posix
+    version: 2.2.2
+  - name: ansible.utils
+    version: 6.1.1

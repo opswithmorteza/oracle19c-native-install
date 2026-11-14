@@ -1,0 +1,109 @@
+---
+- name: Guard a fresh native Oracle 19c installation
+  hosts: oracle19c
+  become: true
+  any_errors_fatal: true
+  tasks:
+    - name: Require explicit scope and approved patched media
+      ansible.builtin.assert:
+        that:
+          - oracle19c_install_approved | default(false) | bool
+          - oracle19c_license_confirmed | default(false) | bool
+          - oracle19c_ru_reviewed | default(false) | bool
+          - oracle19c_ru is match('^19\.[1-9][0-9]\.0\.0\.0$')
+          - oracle19c_gold_sha256 is match('^[a-fA-F0-9]{64}$')
+          - ansible_facts.distribution == 'OracleLinux'
+          - ansible_facts.distribution_major_version == '8'
+          - ansible_facts.architecture == 'x86_64'
+          - ansible_facts.memtotal_mb >= 7500
+          - ansible_facts.swaptotal_mb >= 8000
+          - not (disable_selinux | bool)
+          - not (disable_firewall | bool)
+          - not (configure_host_disks | bool)
+          - not (firewall_open_listener_ports | bool)
+          - db_homes_config.db19.version == '19.3.0.0'
+          - db_homes_installed | length == 1
+        fail_msg: Review README-19C.md and prepare the approved OL8 x86_64 lab first.
+    - name: Require a private operator-supplied database password
+      ansible.builtin.assert:
+        that:
+          - default_dbpass | default('') | length >= 16
+          - default_dbpass | default('') not in ['Oracle_123', 'Welcome123456789']
+      no_log: true
+    - name: Detect existing Oracle inventory and target home
+      ansible.builtin.stat:
+        path: '{{ item }}'
+      loop:
+        - /etc/oraInst.loc
+        - /etc/oracle/olr.loc
+        - /u01/app/oracle/product/19c/dbhome_1
+      register: existing
+    - name: Refuse to modify an existing Oracle installation
+      ansible.builtin.assert:
+        that: not item.stat.exists
+        fail_msg: Existing Oracle installation detected; use an upgrade or recovery procedure.
+      loop: '{{ existing.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+    - name: Check prepared directories and available storage
+      ansible.builtin.command:
+        argv: [python3, -c, "import os,shutil; p='{{ item }}'; assert os.path.isdir(p); assert shutil.disk_usage(p).free >= {{ oracle19c_min_free_gib | int }}*1024**3"]
+      loop: [/u01, /u02]
+      changed_when: false
+      check_mode: false
+    - name: Verify trusted gold-image digest before any installation role
+      ansible.builtin.stat:
+        path: '{{ oracle19c_gold_image }}'
+        checksum_algorithm: sha256
+        get_checksum: true
+      register: media
+    - name: Reject missing or mismatched installation media
+      ansible.builtin.assert:
+        that:
+          - media.stat.isreg | default(false)
+          - media.stat.checksum | default('') | lower == oracle19c_gold_sha256 | lower
+
+- name: Prepare host using pinned upstream roles
+  ansible.builtin.import_playbook: opitzconsulting.ansible_oracle.os
+  vars:
+    hostgroup: oracle19c
+
+- name: Install native database software using pinned upstream roles
+  ansible.builtin.import_playbook: opitzconsulting.ansible_oracle.swdb
+  vars:
+    hostgroup: oracle19c
+
+- name: Create database and PDB using pinned upstream roles
+  ansible.builtin.import_playbook: opitzconsulting.ansible_oracle.manage_db
+  vars:
+    hostgroup: oracle19c
+
+- name: Verify created CDB and RU
+  hosts: oracle19c
+  become: true
+  become_user: oracle
+  tasks:
+    - name: Read installed version, open state and PDBs
+      ansible.builtin.shell: |
+        export ORACLE_HOME=/u01/app/oracle/product/19c/dbhome_1
+        export ORACLE_SID=ORCLCDB
+        "$ORACLE_HOME/bin/sqlplus" -s / as sysdba <<'SQL'
+        whenever sqlerror exit failure
+        set heading off feedback off pagesize 0
+        select version_full from v$instance;
+        select open_mode from v$database;
+        select name || ':' || open_mode from v$pdbs;
+        select patch_id || ':' || status from dba_registry_sqlpatch;
+        exit
+        SQL
+      register: verification
+      changed_when: false
+      when: not ansible_check_mode
+    - name: Require requested RU and open application PDB
+      ansible.builtin.assert:
+        that:
+          - oracle19c_ru in verification.stdout
+          - "'READ WRITE' in verification.stdout"
+          - "'APPPDB:READ WRITE' in verification.stdout"
+        fail_msg: Installation verification failed; preserve logs and review RU/datapatch/PDB state.
+      when: not ansible_check_mode

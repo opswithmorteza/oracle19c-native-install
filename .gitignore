@@ -24,3 +24,12 @@ extensions/.env.yml
 
 # local credentials (e.g. MOS_USERNAME / MOS_PASSWORD)
 .env
+
+# Native 19c profile: never publish local targets, credentials or licensed media
+inventory-19c.local.yml
+secrets-19c.local.yml
+.venv19c/
+.collections19c/
+*.zip
+*.rpm
+*.log

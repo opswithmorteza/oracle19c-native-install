@@ -1,4 +1,12 @@
-# ansible-oracle
+# Oracle 19c native installation profile — Morteza Rajabi
+
+Start with **[README-19C.md](README-19C.md)** for the focused Oracle Linux 8 / 19c profile, pinned upstream dependency, guarded installer, inventory example and verification steps. This is an installation candidate with static checks; a full Oracle deployment has not been validated here. It does not claim that all Oracle bugs are fixed.
+
+This public fork retains the original MIT-licensed project and its authors. The added 19c profile is maintained by Morteza Rajabi. Oracle software and licensed patches must be supplied separately by an entitled operator.
+
+---
+
+# Upstream ansible-oracle
 
 * Automated installation of
    * Single Instance Oracle databases without and with Oracle Restart
